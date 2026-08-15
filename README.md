@@ -13,26 +13,7 @@ Pretrained model weights: [🤗 Hugging Face Hub (`ruwwww/bernini-mnist`)](https
 
 ## Architecture Overview
 
-```
-Class Label (0-9) ───► [Class Embedding (1024)] + [16 Spatial Mask Tokens (1024)]
-                              │
-                              ▼
-                      Qwen/Qwen3-0.6B (Bidirectional Self-Attention Engine)
-                              │
-                              ▼ Hidden States H ∈ ℝ^(16 × 1024)
-            Continuous Flow Matching Head (AdaLN-Modulated MLP)
-                              │
-                              ▼ (K=4 MaskGIT Progressive Cosine Refinement)
-            16 Continuous Semantic Tokens z ∈ ℝ^(16 × 256)
-                              │
-                              ▼
-            2D Spatial ConvFlow Renderer (Bilinear Continuous Upsampling)
-            Optimal Transport Flow Matching ODE in Continuous Pixel Space
-                              │
-                              ▼
-                   Final 28×28 MNIST Image
-                (100.00% Classifier Accuracy)
-```
+![Bernini Architecture](outputs/bernini_architecture_diagram.png)
 
 ### Key Components
 1. **Stage 0 (ViT Semantic Oracle)**: 16-patch Vision Transformer ($7 \times 7$ patches, $4 \times 4$ spatial grid) pretrained on MNIST classification (**98.48% accuracy**), providing ground-truth continuous semantic representations $\mathbf{z} \in \mathbb{R}^{16 \times 256}$.
