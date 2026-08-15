@@ -1,6 +1,11 @@
 # Bernini-MNIST: Latent Semantic Planning for Continuous Flow Diffusion
 
-A minimal, reproduction of ByteDance's **Bernini** architecture (Latent Semantic Planning with MLLMs), adapted for class-conditional digit generation on MNIST.
+[![Hugging Face](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Models-yellow)](https://huggingface.co/ruwwww/bernini-mnist)
+[![GitHub](https://img.shields.io/badge/GitHub-Repository-blue)](https://github.com/ruwwww/bernini-mnist)
+
+A minimal reproduction of ByteDance's **Bernini** architecture (Latent Semantic Planning with MLLMs), adapted for class-conditional digit generation on MNIST.
+
+Pretrained model weights: [🤗 Hugging Face Hub (`ruwwww/bernini-mnist`)](https://huggingface.co/ruwwww/bernini-mnist)
 
 ![Generated Digits Grid](outputs/evaluation/evaluation_grid.png)
 
