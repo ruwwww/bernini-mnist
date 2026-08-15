@@ -13,12 +13,11 @@ Pretrained model weights: [🤗 Hugging Face Hub (`ruwwww/bernini-mnist`)](https
 
 ## Architecture Overview
 
-![Bernini Architecture](outputs/bernini_architecture_diagram.png)
+![Bernini Architecture](diagrams/bernini-mnist-architecture.png)
 
-### Key Components
-1. **Stage 0 (ViT Semantic Oracle)**: 16-patch Vision Transformer ($7 \times 7$ patches, $4 \times 4$ spatial grid) pretrained on MNIST classification (**98.48% accuracy**), providing ground-truth continuous semantic representations $\mathbf{z} \in \mathbb{R}^{16 \times 256}$.
-2. **Stage 1 (Semantic Planner)**: Pretrained `Qwen/Qwen3-0.6B` backbone serving as the bidirectional attention workhorse, paired with a lightweight AdaLN MLP Flow Matching Head that performs **MaskGIT Progressive Refinement** over continuous latent space.
-3. **Stage 2 (2D Spatial ConvFlow Renderer)**: 2D Convolutional ResNet featuring **Smooth Bilinear Continuous Token Upsampling** ($4 \times 4 \to 28 \times 28$) that integrates pixel velocity via Optimal Transport Euler ODE with zero patch-seam artifacts.
+The system decouples visual generation into two focused stages:
+1. **Planner MLLM** (`MNIST ViT` + `Qwen3 0.6B` + `Flow Head`): Operates in continuous semantic space, planning the spatial blueprint of the image.
+2. **Diffusion Renderer** (`ConvResnet Denoiser`): Takes the planned semantic blueprint and denoises continuous pixels into a clean image.
 
 ---
 
