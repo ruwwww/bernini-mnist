@@ -1,0 +1,38 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Pytest / Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Environments
+.venv/
+env/
+venv/
+ENV/
+
+# Upstream Reference
+Bernini/
+
+# Untracked post drafts & briefs
+post_brief.md
+docs/
+*.draft.md
+
+# Data
+data/
+*.pt.tmp
+
+# Large Model Checkpoints
+checkpoints/
+*.pt
+*.safetensors
+
+# OS / Editor
+.DS_Store
+.vscode/
+.idea/
+*.swp

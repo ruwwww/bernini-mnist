@@ -1,0 +1,12 @@
+project_brief_v1.md
+pyproject.toml
+src/bernini_mnist/__init__.py
+src/bernini_mnist.egg-info/PKG-INFO
+src/bernini_mnist.egg-info/SOURCES.txt
+src/bernini_mnist.egg-info/dependency_links.txt
+src/bernini_mnist.egg-info/requires.txt
+src/bernini_mnist.egg-info/top_level.txt
+src/bernini_mnist/data/__init__.py
+src/bernini_mnist/data/mnist_datamodule.py
+src/bernini_mnist/utils/__init__.py
+src/bernini_mnist/utils/seed.py

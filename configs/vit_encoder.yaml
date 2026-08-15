@@ -1,0 +1,12 @@
+img_size: 28
+patch_size: 7
+in_channels: 1
+num_classes: 10
+embed_dim: 256
+depth: 4
+num_heads: 4
+dropout: 0.1
+batch_size: 128
+epochs: 10
+lr: 0.001
+weight_decay: 0.0001

@@ -1,0 +1,5 @@
+=== Bernini MNIST Evaluation Summary ===
+Classifier Accuracy: 100.00%
+Intra-Class Variance: 0.017768
+Intra-Class Pairwise L2: 5.1441
+Mean Nearest Neighbor Dist: 5.0780

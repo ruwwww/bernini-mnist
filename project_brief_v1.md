@@ -1,0 +1,210 @@
+# Bernini‑inspired MNIST Generator (Lightweight)
+
+**Status**: Final draft – team ready  
+**Version**: 3.0 (corrected + simplified)
+
+---
+
+## 1. Purpose
+
+Build a **minimal, class‑conditional MNIST generator** that replicates the **core philosophy** of Bernini (ByteDance's unified video framework):
+
+- **Semantic planning** via an MLLM (small Qwen) with masked token refinement.
+- **Stochastic, iterative prediction** of a continuous semantic representation.
+- A **separate denoising renderer** (here, a lightweight MLP) that turns semantics into pixels.
+
+This is not a full reproduction – it's a **toy demonstration** that isolates Bernini's two‑stage design in a low‑resource setting.
+
+---
+
+## 2. Architecture Overview
+
+```
+
+Class label (0–9) ───► [class token] + [N masked semantic tokens]
+│
+▼
+Qwen‑0.6B (or 1.5B)
+(contextual forward pass)
+│
+▼
+Flow‑matching Decoder (MLP + ResNet)
+predicts target embeddings from masked positions
+│
+▼
+Iterative refinement (mask, predict, keep, repeat)
+│
+▼
+Refined semantic tokens
+│
+▼
+Pixel‑space MLP Denoiser (lightweight)
+conditioned on semantic tokens
+(diffusion / flow matching in 28×28 space)
+│
+▼
+Generated image
+
+```
+
+**Key simplifications (vs. Bernini):**
+- **No VAE** – renderer works directly on 28×28 pixels.
+- **No DiT** – a simple MLP denoiser is sufficient for MNIST resolution.
+- **No multimodal input** – only a digit class, no text/images/video.
+- **No SA‑3D RoPE** – irrelevant for static single‑digit generation.
+
+---
+
+## 3. Semantic Planner (Stage 1)
+
+### Input representation
+- **Class token**: learnable embedding of dimension `d_model` (Qwen's hidden size).
+- **Masked target tokens**: `N` learnable mask embeddings (positional) that the MLLM will fill.  
+  During training, a random subset of these positions is replaced by **ground‑truth semantic embeddings** (from the MNIST ViT encoder) to provide context.
+
+### MLLM
+- `Qwen2‑0.5B` or `Qwen2‑1.5B` (HuggingFace).
+- **Frozen or lightly fine‑tuned** – we only train the class embedding and the flow‑matching decoder.
+- The MLLM processes the input sequence and outputs hidden states at the masked positions.
+
+### Flow‑matching Decoder
+- An MLP (2–3 layers) + ResNet‑style prediction head.
+- Maps hidden states → continuous embeddings of dimension `d_semantic` (e.g., 512).
+- Training objective (flow matching):
+  $$ \mathcal{L}_{\mathrm{FM}} = \| v_\theta(z_t, t, c) - (z_1 - z_0) \|_2^2 $$
+  where:
+  - `z_0` ~ noise (Gaussian)
+  - `z_1` = target semantic embedding (from the ViT encoder)
+  - `c` = class label
+  - `v_θ` is the velocity predictor (the decoder).
+
+### Iterative Refinement (inference)
+1. Start with **all** target tokens masked (i.e., only the class token is visible).
+2. MLLM forward pass → decoder predicts embeddings.
+3. Keep the **most confident** predictions (e.g., those with highest agreement across stochastic runs).
+4. Mask the remaining positions.
+5. Repeat for `K` steps (Bernini uses ~4–8; we can start with 4).
+6. Output the final refined sequence.
+
+### Stochasticity
+- To avoid deterministic prototypes, we inject **random Gaussian noise** into the initial mask tokens and sample different noise seeds per run.
+- The flow‑matching process itself is stochastic (sampling from noise), which adds diversity.
+
+### MNIST ViT Encoder (target space)
+- A small ViT (patch size 4, 6 layers, 8 heads) trained on MNIST classification.
+- We use its **penultimate layer** embeddings (or a learned projection) to produce a sequence of `N` embeddings per image.
+- This encoder is **frozen** during planner training.
+
+---
+
+## 4. Pixel‑space MLP Denoiser (Renderer – Stage 2)
+
+### Architecture
+- A **lightweight MLP** (e.g., 3–4 hidden layers, width 512–1024) that takes:
+  - A noisy 28×28 pixel image (flattened).
+  - The refined semantic tokens (concatenated or via cross‑attention).
+- It predicts the **denoised pixel** (or the noise added, depending on the formulation).
+- **Why MLP?** MNIST is small enough that a transformer isn't necessary – an MLP is faster to train and easier to debug.
+
+### Conditioning
+- The semantic tokens are first projected to a conditioning vector (e.g., via average pooling + MLP).
+- This vector is concatenated with the noisy input at every layer (or fed as a bias in the MLP layers).
+
+### Training objective
+- Flow matching (velocity prediction) on pixel space:
+  $$ \mathcal{L}_{\mathrm{render}} = \| v_\phi(\mathbf{x}_t, t, \mathbf{s}) - (\mathbf{x}_1 - \mathbf{x}_0) \|_2^2 $$
+  where:
+  - `x_t` is the noisy image at time `t` along the probability path.
+  - `s` is the conditioning semantic vector.
+- Alternatively, standard DDPM (noise prediction) – we can implement whichever is simpler.
+
+### Data
+- MNIST training images (60k) paired with their **refined semantic tokens** (produced by the frozen planner from Stage 1, using ground‑truth images as reference).
+
+---
+
+## 5. Joint Fine‑tuning (Stage 3)
+
+- After Stage 1 and Stage 2 are trained independently, we **co‑train** the flow‑matching decoder and the MLP denoiser together with a small learning rate.
+- Loss:
+  $$ \mathcal{L} = \lambda_{\mathrm{plan}} \mathcal{L}_{\mathrm{FM}} + \lambda_{\mathrm{render}} \mathcal{L}_{\mathrm{render}} $$
+  (We can keep `λ` equal or tune).
+- This aligns the planner's output distribution with what the renderer expects, improving final image quality.
+
+---
+
+## 6. Implementation Details
+
+| Component | Specification |
+|-----------|---------------|
+| **MLLM** | `Qwen2‑0.5B` or `Qwen2‑1.5B` (Transformers library) |
+| **Class embedding** | Learnable, dim = `d_model` |
+| **Semantic tokens** | `N = 16`, dim = 512 (hyperparameter) |
+| **MNIST ViT encoder** | Patch size 4, 6 layers, 8 heads, pretrained on MNIST classification |
+| **Flow‑matching decoder** | MLP (3 layers, width 1024) + ResNet block |
+| **MLP denoiser** | 4 hidden layers, width 1024, ReLU activations |
+| **Optimizer** | AdamW (lr: planner 1e‑4, renderer 1e‑4, joint 5e‑5) |
+| **Batch size** | 128–256 |
+| **Epochs** | Planner: 20–30; Renderer: 30–50; Joint: 10–20 |
+| **Hardware** | Single GPU (e.g., RTX 3090) |
+| **Frameworks** | PyTorch, HuggingFace Transformers, `accelerate` |
+
+---
+
+## 7. Evaluation
+
+We will measure **both quality and diversity**, because a model that generates only one prototype per digit is insufficient.
+
+- **Classification accuracy** (on a held‑out MNIST classifier) – indicates how recognisable the digits are.
+- **Per‑class accuracy** – ensures no class is neglected.
+- **Precision & Recall** in a feature space (using a pretrained MNIST CNN) – measures fidelity vs. diversity.
+- **Nearest‑neighbour distance** – average distance of generated samples to the closest real training sample (detects overfitting/memorisation).
+- **Within‑class diversity** – variance of generated samples in feature space, compared to real training variance.
+- **Manual inspection** – visual samples for each digit with different seeds.
+
+---
+
+## 8. Incremental Development Plan (Timeline)
+
+We build from simple to complex, adding the planner only if it brings measurable benefit.
+
+1. **Week 1** – Baseline: Train the MLP denoiser **directly** conditioned on the class label (one‑hot).  
+   - This gives a sanity check and establishes a performance floor.
+
+2. **Week 2** – Replace the class condition with **semantic tokens** from a frozen MNIST ViT encoder.  
+   - Train the renderer to reconstruct from these tokens (no planner yet). This verifies that the semantic space is expressive.
+
+3. **Week 3** – Train the semantic planner (Stage 1) using the ViT embeddings as targets.  
+   - Evaluate how well the planner can reproduce semantic tokens from class alone.
+
+4. **Week 4** – Connect planner → renderer (no joint fine‑tuning). Evaluate end‑to‑end.
+
+5. **Week 5** – Joint fine‑tuning (Stage 3). Compare results.
+
+6. **Week 6** – Ablation: remove stochasticity, use fixed seeds; compare diversity.  
+   - Document and package results.
+
+---
+
+## 9. Known Limitations & Mitigations
+
+| Limitation | Mitigation |
+|------------|------------|
+| Small Qwen may struggle with reasoning | Fine‑tune Qwen on the MNIST token‑prediction task (we already train the decoder; we could also LoRA‑tune Qwen). |
+| MLP denoiser may blur images | Add positional embeddings to the input, or use a small UNet instead if needed. |
+| Semantic planner might collapse to a single prototype | Ensure stochasticity; monitor per‑class diversity. |
+| No text input – planner may be overkill | We treat this as an experiment; if the planner adds no value, we can revert to direct class conditioning. |
+
+---
+
+## 10. References (for team context)
+
+- Bernini paper (ByteDance): [https://arxiv.org/abs/2605.22344](https://arxiv.org/abs/2605.22344)
+- Qwen2: [https://huggingface.co/Qwen/Qwen2-0.5B](https://huggingface.co/Qwen/Qwen2-0.5B)
+- Flow Matching: [https://arxiv.org/abs/2210.02747](https://arxiv.org/abs/2210.02747)
+
+---
+
+**This brief is the single source of truth for the project.**  
+All design decisions are explicit adaptations for MNIST.  
+Suggestions, questions, and edits are welcome as we proceed.
